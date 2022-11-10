@@ -46,6 +46,9 @@ async def default_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # main loop
 if __name__ == '__main__':
+    BOT_NAME = env_handler.get_env("BOT_NAME")
+    BOT_STAGE = env_handler.get_env("BOT_STAGE")
+    BOT_VERSION = env_handler.get_env("BOT_VERSION")
     Database.initialize()
     defaults = Defaults(parse_mode=ParseMode.MARKDOWN,
                         tzinfo=pytz.timezone('Europe/Berlin'))
@@ -62,5 +65,5 @@ if __name__ == '__main__':
     app.add_handlers([hello_handler])
     app.add_handler(rest_handler)
     Logger.log.info(
-        "Application started and all the handlers are added successfully")
+        f"{BOT_NAME} at {BOT_STAGE} stage version {BOT_VERSION} is ready")
     app.run_polling()
