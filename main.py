@@ -11,10 +11,10 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from modules.database import Database
+from Modules.database import Database
 from Classes.ExpenseHandler import Expense
-from modules.env import EnvHandler
-from modules.log import Logger
+from Modules.env import EnvHandler
+from Modules.log import Logger
 
 # create an instance of the improved logger
 logger = Logger()

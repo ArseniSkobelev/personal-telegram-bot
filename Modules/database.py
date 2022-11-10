@@ -1,7 +1,7 @@
 import traceback
 from pymongo import MongoClient
-from modules.env import EnvHandler
-from modules.log import Logger
+from Modules.env import EnvHandler
+from Modules.log import Logger
 
 env_handler = EnvHandler('./.env')
 
