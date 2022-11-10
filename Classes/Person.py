@@ -1,4 +1,4 @@
-from Modules.env import EnvHandler
+from Handlers.env import EnvHandler
 
 env_handler = EnvHandler('./.env')
 
@@ -10,6 +10,9 @@ class Person:
         self.height = height
         self.birthday = birthday
         self.username = username
+
+    def save(self):
+        return vars(self)
 
 
 def authorize(userid):
