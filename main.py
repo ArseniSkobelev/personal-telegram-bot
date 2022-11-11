@@ -61,7 +61,8 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
     else:
         answer_text = env_handler.get_env("BOT_MESSAGES_UNATHORIZED_USER")
-        Logger.log.warning("An unathorized user has been detected")
+        Logger.log.warning(env_handler.get_env(
+            "USER_AUTHORIZATION_UNAUTHORIZED"))
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
@@ -85,7 +86,8 @@ async def default_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await dialogue_create_user(update, context, update.effective_chat.id)
     else:
         answer_text = env_handler.get_env("BOT_MESSAGES_UNATHORIZED_USER")
-        Logger.log.warning("An unathorized user has been detected")
+        Logger.log.warning(env_handler.get_env(
+            "USER_AUTHORIZATION_UNAUTHORIZED"))
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
@@ -142,9 +144,9 @@ async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYP
 
             keyboard = [["Yes", "No"]]
             reply_markup = ReplyKeyboardMarkup(keyboard)
-            # TODO: add user to db
 
-            print(_ph.save())
+            _db.initialize()
+            _db.insert('user', _ph.save())
 
             _ph.destroy_person()
             await update.message.reply_text(text, reply_markup=reply_markup)

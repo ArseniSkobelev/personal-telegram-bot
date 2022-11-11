@@ -17,13 +17,20 @@ class Database(object):
             client = MongoClient(Database.URI)
             Database.DATABASE = client[env_handler.get_env(
                 "MONGODB_DB_NAME")]
-            logger.log.info("Database connection established successfully")
+            logger.log.info(env_handler.get_env(
+                "DB_CONNECTION_SUCCESS"))
         except Exception as error:
             logger.log.error(traceback.format_exc())
 
     @staticmethod
     def insert(collection, data):
-        Database.DATABASE[collection].insert_one(data)
+        try:
+            logger = Logger()
+            Database.DATABASE[collection].insert_one(data)
+            logger.log.info(env_handler.get_env(
+                "DB_INSERT_SUCCESS"))
+        except Exception as error:
+            logger.log.error(traceback.format_exc())
 
     @staticmethod
     def find(collection, query):
@@ -32,28 +39,3 @@ class Database(object):
     @staticmethod
     def find_one(collection, query):
         return Database.DATABASE[collection].find_one(query)
-
-    # def set_database(self, database_name):
-    #     self.database_name = database_name
-
-    # def connect(self):
-
-    # def close(self):
-    #     self.connection.close()
-
-# -------------------- USAGE EXAMPLE --------------------
-# from modules.database import DatabaseHandler
-#
-# db = DatabaseHandler(DB_NAME)
-#
-# item_1 = {
-#   "item_name" : "Blender",
-#   "max_discount" : "10%",
-#   "batch_number" : "RR450020FRG",
-#   "price" : 340,
-#   "category" : "kitchen appliance"
-# }
-
-# db.connect()[COLLECTION_NAME].insert_one(item_1)
-# db.close()
-# -------------------- USAGE EXAMPLE --------------------
