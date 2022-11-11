@@ -53,6 +53,14 @@ def get_time_of_day(hour):
     else:
         return "day"
 
+# TODO:
+# TODO:
+# TODO:
+# TODO: Move from .env to real config file approach (monday, 14.11)
+# TODO:
+# TODO:
+# TODO:
+
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if authorize(update.effective_user.id):
