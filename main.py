@@ -21,6 +21,9 @@ from Modules.log import Logger
 from Classes.Person import authorize
 from Handlers.dialogue_handler import DialogueHandler
 from Handlers.keywords import KeywordHandler
+from Classes.Person import (
+    Person
+)
 
 
 # create an instance of the improved logger
@@ -32,6 +35,7 @@ env_handler = EnvHandler(dotenv_path='./.env')
 
 _dh = DialogueHandler()
 _db = Database()
+_ph = Person()
 _kh = KeywordHandler([["User management", "Finances"],
                      ["Automation", "Miscellaneous"]])
 
@@ -99,18 +103,59 @@ async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if dialogue:
         current_step = dialogue.current_step
-        # TODO: continue dialogue
         if current_step == 1:
             if update.effective_message.text.lower() == "no":
                 _dh.delete_dialogue(
                     env_handler.get_env("DIALOGUE_CREATE_USER"))
             else:
                 text = "Let's do it! 🎉🎉\nSo, what is your full name?"
+                temp_person = Person()
+                _ph.create_person()
+                _ph.set_userid(userid=update.effective_chat.id)
                 await context.bot.send_message(update.effective_chat.id, text)
                 dialogue.next_step()
         elif current_step == 2:
+            _ph.name = update.effective_message.text
+            text = f"Nice to meet you, {_ph.name}! What is your age?"
+            await context.bot.send_message(update.effective_chat.id, text)
             dialogue.next_step()
-            print("yes")
+        elif current_step == 3:
+            _ph.age = update.effective_message.text
+            text = f"Cool, how tall are you tho?"
+            await context.bot.send_message(update.effective_chat.id, text)
+            dialogue.next_step()
+        elif current_step == 4:
+            _ph.height = update.effective_message.text
+            text = f"What about the weight?"
+            await context.bot.send_message(update.effective_chat.id, text)
+            dialogue.next_step()
+        elif current_step == 5:
+            _ph.weight = update.effective_message.text
+            text = f"And when were you born?"
+            await context.bot.send_message(update.effective_chat.id, text)
+            dialogue.next_step()
+        elif current_step == 6:
+            _ph.birthday = update.effective_message.text
+            _ph.username = update.effective_user.username
+            f_name = _ph.name.split(" ")
+            text = f"I think that is about it, {f_name[0]}. Would you like to do something interesting right away?"
+
+            keyboard = [["Yes", "No"]]
+            reply_markup = ReplyKeyboardMarkup(keyboard)
+            # TODO: add user to db
+
+            print(_ph.save())
+
+            _ph.destroy_person()
+            await update.message.reply_text(text, reply_markup=reply_markup)
+            dialogue.next_step()
+        elif current_step == 7:
+            if update.effective_message.text.lower() == "no":
+                print("does not want to do anything")
+            else:
+                text = "What are you interested in right now?"
+                await context.bot.send_message(update.effective_chat.id, text)
+                dialogue.next_step()
     else:
         dialogue_title = env_handler.get_env("DIALOGUE_CREATE_USER")
         Logger.log.info(
