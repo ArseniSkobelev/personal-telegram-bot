@@ -1,6 +1,6 @@
-from Handlers.env import EnvHandler
+from Handlers.config import ConfigHandler
 
-env_handler = EnvHandler('./.env')
+_ch = ConfigHandler()
 
 
 class Person():
@@ -53,7 +53,7 @@ class Person():
 
 
 def authorize(userid):
-    if str(userid) in env_handler.get_env("ALLOWED_USER_ID"):
+    if str(userid) in _ch.get_key("BOT", "ALLOWED_USER_ID"):
         return True
     else:
         return False

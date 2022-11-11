@@ -1,13 +1,13 @@
 import traceback
 from pymongo import MongoClient
-from Handlers.env import EnvHandler
+from Handlers.config import ConfigHandler
 from Modules.log import Logger
 
-env_handler = EnvHandler('./.env')
+_ch = ConfigHandler()
 
 
 class Database(object):
-    URI = env_handler.get_env("MONGODB_CONNECTION_URI")
+    URI = _ch.get_key("DATABASE", "CONNECTION_URI")
     DATABASE = None
 
     @staticmethod
@@ -15,10 +15,8 @@ class Database(object):
         try:
             logger = Logger()
             client = MongoClient(Database.URI)
-            Database.DATABASE = client[env_handler.get_env(
-                "MONGODB_DB_NAME")]
-            logger.log.info(env_handler.get_env(
-                "DB_CONNECTION_SUCCESS"))
+            Database.DATABASE = client[_ch.get_key("DATABASE", "NAME")]
+            logger.log.info(_ch.get_key("LOG", "DB_CONNECTION_SUCCESS"))
         except Exception as error:
             logger.log.error(traceback.format_exc())
 
@@ -27,8 +25,7 @@ class Database(object):
         try:
             logger = Logger()
             Database.DATABASE[collection].insert_one(data)
-            logger.log.info(env_handler.get_env(
-                "DB_INSERT_SUCCESS"))
+            logger.log.info(_ch.get_key("LOG", "DB_INSERT_SUCCESS"))
         except Exception as error:
             logger.log.error(traceback.format_exc())
 

@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 from Modules.database import Database
 from Classes.Expense import Expense
-from Handlers.env import EnvHandler
+from Handlers.config import ConfigHandler
 from Modules.log import Logger
 from Classes.Person import authorize
 from Handlers.dialogue_handler import DialogueHandler
@@ -30,9 +30,7 @@ from Classes.Person import (
 logger = Logger()
 Logger.log.info("Initialized logger")
 
-# create an instance of EnvHandler
-env_handler = EnvHandler(dotenv_path='./.env')
-
+_ch = ConfigHandler()
 _dh = DialogueHandler()
 _db = Database()
 _ph = Person()
@@ -40,7 +38,7 @@ _kh = KeywordHandler([["User management", "Finances"],
                      ["Automation", "Miscellaneous"]])
 
 # constants
-DB_NAME = env_handler.get_env("MONGODB_DB_NAME")
+DB_NAME = _ch.get_key("DATABASE", "NAME")
 
 
 def get_time_of_day(hour):
@@ -68,9 +66,9 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
     else:
-        answer_text = env_handler.get_env("BOT_MESSAGES_UNATHORIZED_USER")
-        Logger.log.warning(env_handler.get_env(
-            "USER_AUTHORIZATION_UNAUTHORIZED"))
+        answer_text = _ch.get_key("BOT_MESSAGES", "UNATHORIZED_USER")
+        Logger.log.warning(_ch.get_key(
+            "LOG", "USER_AUTHORIZATION_UNAUTHORIZED"))
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
@@ -86,16 +84,15 @@ async def default_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user:
                 logger.log.debug(
                     f"An unhandled command has been executed by {update.effective_user.username}")
-                answer_text = env_handler.get_env(
-                    "BOT_MESSAGES_UNKNOWN_COMMAND")
+                answer_text = _ch.get_key("BOT_MESSAGES", "UNKNOWN_COMMAND")
 
                 await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
             else:
                 await dialogue_create_user(update, context, update.effective_chat.id)
     else:
-        answer_text = env_handler.get_env("BOT_MESSAGES_UNATHORIZED_USER")
-        Logger.log.warning(env_handler.get_env(
-            "USER_AUTHORIZATION_UNAUTHORIZED"))
+        answer_text = _ch.get_key("BOT_MESSAGES", "UNATHORIZED_USER")
+        Logger.log.warning(_ch.get_key(
+            "LOG", "USER_AUTHORIZATION_UNAUTHORIZED"))
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
@@ -109,14 +106,16 @@ async def start(update: Update) -> None:
 
 async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYPE, userid):
     dialogue = _dh.get_dialogue_by_title(
-        title=env_handler.get_env("DIALOGUE_CREATE_USER"), userid=userid)
+        title=_ch.get_key(
+            "DIALOGUE", "CREATE_USER"), userid=userid)
 
     if dialogue:
         current_step = dialogue.current_step
         if current_step == 1:
             if update.effective_message.text.lower() == "no":
                 _dh.delete_dialogue(
-                    env_handler.get_env("DIALOGUE_CREATE_USER"))
+                    _ch.get_key(
+                        "DIALOGUE", "CREATE_USER"))
             else:
                 text = "Let's do it! 🎉🎉\nSo, what is your full name?"
                 temp_person = Person()
@@ -167,7 +166,8 @@ async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYP
                 await context.bot.send_message(update.effective_chat.id, text)
                 dialogue.next_step()
     else:
-        dialogue_title = env_handler.get_env("DIALOGUE_CREATE_USER")
+        dialogue_title = _ch.get_key(
+            "DIALOGUE", "CREATE_USER")
         Logger.log.info(
             f"A new dialogue has been started with the following title: {dialogue_title} by {update.effective_user.username}")
         _dh.create_dialogue(dialogue_title, userid)
@@ -191,9 +191,12 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # main loop
 if __name__ == '__main__':
-    BOT_NAME = env_handler.get_env("BOT_NAME")
-    BOT_STAGE = env_handler.get_env("BOT_STAGE")
-    BOT_VERSION = env_handler.get_env("BOT_VERSION")
+    BOT_NAME = _ch.get_key(
+        "BOT", "NAME")
+    BOT_STAGE = _ch.get_key(
+        "BOT", "STAGE")
+    BOT_VERSION = _ch.get_key(
+        "BOT", "VERSION")
 
     Database.initialize()
 
@@ -202,7 +205,8 @@ if __name__ == '__main__':
 
     app = (
         ApplicationBuilder()
-        .token(env_handler.get_env("TELEGRAM_API_KEY"))
+        .token(_ch.get_key(
+            "TELEGRAM", "API_KEY"))
         .defaults(defaults)
         .build()
     )
