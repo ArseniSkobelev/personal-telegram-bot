@@ -1,10 +1,10 @@
-import pytz
+import numpy as np
 from datetime import datetime
+import pytz
+import requests
+from bs4 import BeautifulSoup
 from telegram import (Update,
-                      InlineKeyboardButton,
-                      InlineKeyboardMarkup,
-                      ReplyKeyboardMarkup,
-                      KeyboardButton)
+                      ReplyKeyboardMarkup)
 from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
@@ -14,16 +14,16 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-from Modules.database import Database
-from Classes.Expense import Expense
-from Handlers.config import ConfigHandler
-from Modules.log import Logger
-from Classes.Person import authorize
-from Handlers.dialogue_handler import DialogueHandler
-from Handlers.keywords import KeywordHandler
 from Classes.Person import (
     Person
 )
+from Classes.Person import authorize
+from Classes.News import Article
+from Modules.database import Database
+from Modules.log import Logger
+from Handlers.config import ConfigHandler
+from Handlers.dialogue_handler import DialogueHandler
+from Handlers.keywords import KeywordHandler
 
 
 # create an instance of the improved logger
@@ -50,14 +50,6 @@ def get_time_of_day(hour):
         return "night"
     else:
         return "day"
-
-# TODO:
-# TODO:
-# TODO:
-# TODO: Move from .env to real config file approach (monday, 14.11)
-# TODO:
-# TODO:
-# TODO:
 
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -104,6 +96,34 @@ async def start(update: Update) -> None:
     await update.message.reply_text("Please choose:", reply_markup=reply_markup)
 
 
+async def get_news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    url = "https://www.vg.no/"
+    number_of_articles = int(_ch.get_key("CONFIG", "NUMBER_OF_NEWS_ARTICLES"))
+    message = ""
+
+    articles = []
+
+    r1 = requests.get(url)
+    coverpage = r1.content
+    soup1 = BeautifulSoup(coverpage, 'html5lib')
+    coverpage_news = soup1.find_all('article', class_='article')
+
+    for i in np.arange(0, number_of_articles):
+        link = coverpage_news[i].find(
+            'div', class_='article-container').find('a')['href']
+
+        title = coverpage_news[i].find(
+            'div', class_='article-container').find('a').find('div', class_="titles").find('h3')['aria-label']
+
+        article = Article(title, link)
+        articles.append(article)
+
+    for i, article in enumerate(articles):
+        message += f"[{article.title}]({article.url})\n\n"
+
+    await update.message.reply_text(message)
+
+
 async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYPE, userid):
     dialogue = _dh.get_dialogue_by_title(
         title=_ch.get_key(
@@ -118,7 +138,6 @@ async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYP
                         "DIALOGUE", "CREATE_USER"))
             else:
                 text = "Let's do it! 🎉🎉\nSo, what is your full name?"
-                temp_person = Person()
                 _ph.create_person()
                 _ph.set_userid(userid=update.effective_chat.id)
                 await context.bot.send_message(update.effective_chat.id, text)
@@ -130,17 +149,17 @@ async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYP
             dialogue.next_step()
         elif current_step == 3:
             _ph.age = update.effective_message.text
-            text = f"Cool, how tall are you tho?"
+            text = "Cool, how tall are you tho?"
             await context.bot.send_message(update.effective_chat.id, text)
             dialogue.next_step()
         elif current_step == 4:
             _ph.height = update.effective_message.text
-            text = f"What about the weight?"
+            text = "What about the weight?"
             await context.bot.send_message(update.effective_chat.id, text)
             dialogue.next_step()
         elif current_step == 5:
             _ph.weight = update.effective_message.text
-            text = f"And when were you born?"
+            text = "And when were you born?"
             await context.bot.send_message(update.effective_chat.id, text)
             dialogue.next_step()
         elif current_step == 6:
@@ -214,8 +233,10 @@ if __name__ == '__main__':
     hello_handler = PrefixHandler("", "hello", hello)
     today_handler = PrefixHandler("!", "today", today)
     start_handler = PrefixHandler("!", "start", start)
+    get_news_handler = PrefixHandler("", "news", get_news)
     default_handler = MessageHandler(filters.ALL, default_handler)
-    app.add_handlers([hello_handler, today_handler, start_handler])
+    app.add_handlers([hello_handler, today_handler,
+                     start_handler, get_news_handler])
     app.add_handler(default_handler)
     Logger.log.info(
         f"{BOT_NAME} at {BOT_STAGE} stage version {BOT_VERSION} is ready")
