@@ -45,7 +45,7 @@ class Person():
             "userid": self.userid
         }
 
-    def create_person(self, userid=None):
+    def create_person(self):
         self.active_people = Person()
 
     def destroy_person(self):

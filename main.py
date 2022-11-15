@@ -1,5 +1,5 @@
-import numpy as np
 from datetime import datetime
+import numpy as np
 import pytz
 import requests
 from bs4 import BeautifulSoup
@@ -14,6 +14,10 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from Handlers.config import ConfigHandler
+from Handlers.weather_code import WeatherCodeHandler
+from Handlers.dialogue_handler import DialogueHandler
+from Handlers.keywords import KeywordHandler
 from Classes.Person import (
     Person
 )
@@ -21,24 +25,18 @@ from Classes.Person import authorize
 from Classes.News import Article
 from Modules.database import Database
 from Modules.log import Logger
-from Handlers.config import ConfigHandler
-from Handlers.dialogue_handler import DialogueHandler
-from Handlers.keywords import KeywordHandler
 
 
-# create an instance of the improved logger
 logger = Logger()
 Logger.log.info("Initialized logger")
 
 _ch = ConfigHandler()
+_wch = WeatherCodeHandler()
 _dh = DialogueHandler()
 _db = Database()
 _ph = Person()
 _kh = KeywordHandler([["User management", "Finances"],
                      ["Automation", "Miscellaneous"]])
-
-# constants
-DB_NAME = _ch.get_key("DATABASE", "NAME")
 
 
 def get_time_of_day(hour):
@@ -88,40 +86,86 @@ async def default_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
-async def start(update: Update) -> None:
-    keyboard = _kh.keywords
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if authorize(update.effective_user.id):
+        keyboard = _kh.keywords
 
-    reply_markup = ReplyKeyboardMarkup(keyboard)
+        reply_markup = ReplyKeyboardMarkup(keyboard)
 
-    await update.message.reply_text("Please choose:", reply_markup=reply_markup)
+        await update.message.reply_text("Please choose:", reply_markup=reply_markup)
+    else:
+        answer_text = _ch.get_key("BOT_MESSAGES", "UNATHORIZED_USER")
+        Logger.log.warning(_ch.get_key(
+            "LOG", "USER_AUTHORIZATION_UNAUTHORIZED"))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
-async def get_news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    url = "https://www.vg.no/"
-    number_of_articles = int(_ch.get_key("CONFIG", "NUMBER_OF_NEWS_ARTICLES"))
-    message = ""
+async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if authorize(update.effective_user.id):
+        date_today = datetime.today()
+        str_format = date_today.strftime(f"%Y-%m-%d")
+        hour = datetime.now(pytz.timezone("Europe/Berlin")).strftime("%H")
 
-    articles = []
+        # TODO
+        # TODO
+        # TODO location configuration
+        # TODO
+        # TODO
 
-    r1 = requests.get(url)
-    coverpage = r1.content
-    soup1 = BeautifulSoup(coverpage, 'html5lib')
-    coverpage_news = soup1.find_all('article', class_='article')
+        api_url = f"https://api.open-meteo.com/v1/forecast?latitude=60.79&longitude=11.03&hourly=temperature_2m,rain,weathercode&current_weather=true&timezone=Europe%2FBerlin&start_date={str(str_format)}&end_date={str(str_format)}"
 
-    for i in np.arange(0, number_of_articles):
-        link = coverpage_news[i].find(
-            'div', class_='article-container').find('a')['href']
+        response = requests.get(api_url, timeout=5)
+        response_json = response.json()
+        weather_status = ""
+        for time, temp, code, rain in zip(response_json['hourly']['time'], response_json['hourly']['temperature_2m'], response_json['hourly']['weathercode'], response_json['hourly']['rain']):
+            if (str(time[11:]).__contains__(hour)):
+                weather_status = _wch.get_weather_status(str(code))
+                data = dict()
+                data['time'] = time
+                data['temp'] = temp
+                data['code'] = weather_status
+                data['rain'] = rain
+                return data
+    else:
+        answer_text = _ch.get_key("BOT_MESSAGES", "UNATHORIZED_USER")
+        Logger.log.warning(_ch.get_key(
+            "LOG", "USER_AUTHORIZATION_UNAUTHORIZED"))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
-        title = coverpage_news[i].find(
-            'div', class_='article-container').find('a').find('div', class_="titles").find('h3')['aria-label']
 
-        article = Article(title, link)
-        articles.append(article)
+async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if authorize(update.effective_user.id):
+        url = _ch.get_key("CONFIG", "ARTICLE_WEBSITE")
+        number_of_articles = int(_ch.get_key(
+            "CONFIG", "NUMBER_OF_NEWS_ARTICLES"))
+        message = ""
 
-    for i, article in enumerate(articles):
-        message += f"[{article.title}]({article.url})\n\n"
+        articles = []
 
-    await update.message.reply_text(message)
+        r1 = requests.get(url, timeout=5)
+        coverpage = r1.content
+        soup1 = BeautifulSoup(coverpage, 'html5lib')
+        coverpage_news = soup1.find_all('article', class_='article')
+
+        for i in np.arange(0, number_of_articles):
+            link = coverpage_news[i].find(
+                'div', class_='article-container').find('a')['href']
+
+            title = coverpage_news[i].find(
+                'div', class_='article-container').find('a').find('div', class_="titles").find('h3')['aria-label']
+
+            article = Article(title, link)
+            articles.append(article)
+
+        for i, article in enumerate(articles):
+            message += f"[{article.title}]({article.url})\n\n"
+
+        await update.message.reply_text(message, disable_web_page_preview=True)
+    else:
+        answer_text = _ch.get_key("BOT_MESSAGES", "UNATHORIZED_USER")
+        Logger.log.warning(_ch.get_key(
+            "LOG", "USER_AUTHORIZATION_UNAUTHORIZED"))
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
 
 
 async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYPE, userid):
@@ -202,10 +246,13 @@ async def today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now()
     current_hour = now.hour
 
-    # TODO fill with information about the current day; fetch APIs for weather data, news and other things that could be relevant
-    answer_text = f"Good {get_time_of_day(current_hour)}, *{update.effective_user.username}*!"
+    weather_data = await weather(update, context)
+
+    answer_text = f"Good {get_time_of_day(current_hour)}, *{update.effective_user.username}*!\nThe weather status for today is: {weather_data['code']}. The current temperature is {weather_data['temp']}°C and the rain expectancy is at {weather_data['rain']}mm for the current hour.\n\nHere are the news from today's newspaper:"
 
     await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
+
+    await news(update, context)
 
 
 # main loop
@@ -233,10 +280,12 @@ if __name__ == '__main__':
     hello_handler = PrefixHandler("", "hello", hello)
     today_handler = PrefixHandler("!", "today", today)
     start_handler = PrefixHandler("!", "start", start)
-    get_news_handler = PrefixHandler("", "news", get_news)
+
+    weather_handler = PrefixHandler("!", "weather", weather)
+
     default_handler = MessageHandler(filters.ALL, default_handler)
     app.add_handlers([hello_handler, today_handler,
-                     start_handler, get_news_handler])
+                     start_handler, weather_handler])
     app.add_handler(default_handler)
     Logger.log.info(
         f"{BOT_NAME} at {BOT_STAGE} stage version {BOT_VERSION} is ready")
