@@ -18,6 +18,7 @@ from Handlers.config import ConfigHandler
 from Handlers.weather_code import WeatherCodeHandler
 from Handlers.dialogue_handler import DialogueHandler
 from Handlers.keywords import KeywordHandler
+from Handlers.budget import BudgetHandler
 from Classes.Person import (
     Person
 )
@@ -35,7 +36,8 @@ _wch = WeatherCodeHandler()
 _dh = DialogueHandler()
 _db = Database()
 _ph = Person()
-_kh = KeywordHandler([["User management", "Finances"],
+_bh = BudgetHandler()
+_kh = KeywordHandler([["User management", "Budget"],
                      ["Automation", "Miscellaneous"]])
 
 
@@ -48,6 +50,14 @@ def get_time_of_day(hour):
         return "night"
     else:
         return "day"
+
+
+async def budget(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    new_budget = _bh.create_budget(update.effective_chat.id)
+    new_transaction = _bh.create_transaction(update.effective_chat.id)
+    print(new_budget, new_transaction)
+
+    await context.bot.send_message(update.effective_chat.id, "Test")
 
 
 async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,21 +74,28 @@ async def hello(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def default_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if authorize(update.effective_user.id):
-        if (_kh.is_keyword(_kh.keywords, update.effective_message.text)):
-            logger.log.debug(
-                f"Handling a keyword entered by {update.effective_user.username}")
-            # TODO: handle keyword in default handler
-            print("keyword")
-        else:
-            user = _db.find_one('user', {"userid": update.effective_user.id})
-            if user:
-                logger.log.debug(
-                    f"An unhandled command has been executed by {update.effective_user.username}")
-                answer_text = _ch.get_key("BOT_MESSAGES", "UNKNOWN_COMMAND")
+        if _dh.get_dialogues_by_userid(update.effective_user.id) or _kh.is_keyword(_kh.keywords, update.effective_message.text):
+            if _dh.get_dialogue_by_title(_ch.get_key(
+                    "DIALOGUE", "CREATE_BUDGET"), update.effective_user.id):
+                await dialogue_create_budget(update, context, update.effective_user.id)
+            if update.effective_message.text == "Budget" or _dh.get_dialogue_by_title(_ch.get_key(
+                    "DIALOGUE", "BUDGET"), update.effective_user.id):
 
-                await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
+                await dialogue_budget(update, context, update.effective_user.id)
+                # TODO: handle keyword in default handler
+
             else:
-                await dialogue_create_user(update, context, update.effective_chat.id)
+                user = _db.find_one(
+                    'user', {"userid": update.effective_user.id})
+                if user:
+                    logger.log.debug(
+                        f"An unhandled command has been executed by {update.effective_user.username}")
+                    answer_text = _ch.get_key(
+                        "BOT_MESSAGES", "UNKNOWN_COMMAND")
+
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
+                else:
+                    await dialogue_create_user(update, context, update.effective_chat.id)
     else:
         answer_text = _ch.get_key("BOT_MESSAGES", "UNATHORIZED_USER")
         Logger.log.warning(_ch.get_key(
@@ -166,6 +183,76 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         Logger.log.warning(_ch.get_key(
             "LOG", "USER_AUTHORIZATION_UNAUTHORIZED"))
         await context.bot.send_message(chat_id=update.effective_chat.id, text=answer_text)
+
+
+async def dialogue_create_budget(update: Update, context: ContextTypes.DEFAULT_TYPE, userid) -> None:
+    dialogue = _dh.get_dialogue_by_title(
+        title=_ch.get_key(
+            "DIALOGUE", "CREATE_BUDGET"), userid=userid)
+
+    if dialogue:
+        current_step = dialogue.current_step
+        if current_step == 1:
+            budget = _bh.create_budget(userid)
+            budget.balance = update.effective_message.text
+            budget.last_update = datetime.now()
+            budget.is_updated = True
+            budget.save()
+
+            _dh.delete_dialogue(_ch.get_key(
+                "DIALOGUE", "CREATE_BUDGET"))
+
+            await context.bot.send_message(chat_id=update.effective_chat.id, text="Nice! Your budget is now created!")
+    else:
+        dialogue_title = _ch.get_key(
+            "DIALOGUE", "CREATE_BUDGET")
+        Logger.log.info(
+            f"A new dialogue has been started with the following title: {dialogue_title} by {update.effective_user.username}")
+        _dh.create_dialogue(dialogue_title, userid)
+        text = "What is your budget for this month?"
+
+        await update.message.reply_text(text)
+
+
+async def dialogue_budget(update: Update, context: ContextTypes.DEFAULT_TYPE, userid) -> None:
+    dialogue = _dh.get_dialogue_by_title(
+        title=_ch.get_key(
+            "DIALOGUE", "BUDGET"), userid=userid)
+
+    if dialogue:
+        current_step = dialogue.current_step
+        if current_step == 1:
+            if (update.effective_message.text == "Yes"):
+                if (len(list(_db.find("budget", {"owner_id": userid}))) == 0):
+                    keyboard = [["Yes", "No"]]
+
+                    reply_markup = ReplyKeyboardMarkup(keyboard)
+
+                    await context.bot.send_message(userid, f"You don't seem to have a budget setup yet, {update.effective_user.username}. Do you wan't to do it now?", reply_markup=reply_markup)
+            elif update.effective_message.text == "No":
+                _dh.delete_dialogue(_ch.get_key(
+                    "DIALOGUE", "BUDGET"))
+                return await update.message.reply_text("That's ok. I am always here to help if you need me!")
+            dialogue.next_step()
+        if current_step == 2:
+            if (update.effective_message.text == "Yes"):
+                return await dialogue_create_budget(update, context, userid)
+            elif update.effective_message.text == "No":
+                _dh.delete_dialogue(_ch.get_key(
+                    "DIALOGUE", "BUDGET"))
+                return await update.message.reply_text("That's ok. I am always here to help if you need me!")
+    else:
+        dialogue_title = _ch.get_key(
+            "DIALOGUE", "BUDGET")
+        Logger.log.info(
+            f"A new dialogue has been started with the following title: {dialogue_title} by {update.effective_user.username}")
+        _dh.create_dialogue(dialogue_title, userid)
+        text = f"Hey, *{update.effective_user.username}*! Do you want to do something related to budgetting?"
+        keyboard = [["Yes", "No"]]
+
+        reply_markup = ReplyKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(text, reply_markup=reply_markup)
 
 
 async def dialogue_create_user(update: Update, context: ContextTypes.DEFAULT_TYPE, userid):
@@ -281,11 +368,11 @@ if __name__ == '__main__':
     today_handler = PrefixHandler("!", "today", today)
     start_handler = PrefixHandler("!", "start", start)
 
-    weather_handler = PrefixHandler("!", "weather", weather)
+    budget_handler = PrefixHandler("!", "budget", budget)
 
     default_handler = MessageHandler(filters.ALL, default_handler)
     app.add_handlers([hello_handler, today_handler,
-                     start_handler, weather_handler])
+                     start_handler, budget_handler])
     app.add_handler(default_handler)
     Logger.log.info(
         f"{BOT_NAME} at {BOT_STAGE} stage version {BOT_VERSION} is ready")
